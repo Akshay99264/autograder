@@ -1,25 +1,24 @@
 // author : Ravi Patidar 23M0796
 #include<stdlib.h>
-#include"support.h"
+#include "queue.h"
 
 void init_queue(queue *q,int max_size)
 {
     q->size=max_size;
-    q->values=malloc(sizeof(int*)*q->size);
+    q->values=malloc(sizeof(char*)*q->size);
     q->front=0;
     q->rear=0;
     q->numEntries=0;
 }
-int *enqueue(queue *q,int *client_sockfd)
+void *enqueue(queue *q,char *client_sockfd)
 {
     q->rear = (q->rear + 1) % q->size;
     if (q->front == q->rear)
     {
-        if (q->rear = 0)
+        if (q->rear == 0)
             q->rear = q->size - 1;
         else
             q->rear=q->rear-1;
-        return 0;
     }
     else
     {
@@ -28,9 +27,9 @@ int *enqueue(queue *q,int *client_sockfd)
     }
 }
 
-int *dequeue(queue *q)
+char *dequeue(queue *q)
 {
-    int *item;
+    char *item;
     if (q->front == q->rear)
     {
         return 0;

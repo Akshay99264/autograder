@@ -1,17 +1,17 @@
 # author : Ravi Patidar 23M0796
 all: server
 
-server: queueSupport.o start.o gradingServer.o
-	cc -o server queueSupport.o start.o gradingServer.o -lpthread
+server: queue.o gradingServer.o handle_clients.o
+	cc -o server queue.o gradingServer.o handle_clients.o -lpthread
 
-queueSupport.o: queueSupport.c support.h
-	cc -c queueSupport.c
-
-start.o: start.c support.h
-	cc -c start.c
-
-gradingServer.o: gradingServer.c support.h
+gradingServer.o: gradingServer.c queue.h handle_clients.h
 	cc -c gradingServer.c
 
+handle_clients.o: handle_clients.c handle_clients.h queue.h
+	cc -c handle_clients.c 
+
+queue.o: queue.c queue.h
+	cc -c queue.c
+
 clean:
-	rm -f *.o
+	rm -f *.o server

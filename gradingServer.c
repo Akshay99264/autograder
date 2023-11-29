@@ -12,17 +12,10 @@
 #include <signal.h>
 #include <pthread.h>
 #include <sys/syscall.h>
-#include "support.h"
-int QUEUE_SIZE=10;
-void *thread_function(void *arg);
-void masterFunction(int *pClient);
-int count = 0;
-int taskcount = 0;
-int found = 0;
-queue q;
-pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t taskReady = PTHREAD_COND_INITIALIZER;
-//pthread_mutex_t assignmentMutex = PTHREAD_MUTEX_INITIALIZER;
+#include "queue.h"
+#include "handle_clients.h"
+
+int QUEUE_SIZE=30;
 
 int main(int argc, char *argv[])
 {
@@ -37,7 +30,8 @@ int main(int argc, char *argv[])
     }
     int MAX_THREADS=atoi(argv[2]);
     pthread_t threadPool[MAX_THREADS];
-    init_queue(&q,QUEUE_SIZE);
+    init_queue(&client_queue,QUEUE_SIZE);
+    init_queue(&evalution_queue, QUEUE_SIZE);
 
     for (int i = 0; i < MAX_THREADS; i++)
     {
@@ -72,48 +66,12 @@ int main(int argc, char *argv[])
 
         int *pClient = malloc(sizeof(int));
         *pClient = newsockfd;
-        masterFunction(pClient);
+        clientsMasterFunc(pClient);
     }
-    pthread_mutex_destroy(&queue_mutex);
-    pthread_cond_destroy(&taskReady);
+    // pthread_mutex_destroy(&queue_mutex);
+    // pthread_cond_destroy(&taskReady);
     close(sockfd);
 
     return 0;
 }
 
-void *thread_function(void *arg)
-{
-    while (1)
-    {
-        int *pClient;
-        pthread_mutex_lock(&queue_mutex);
-        while (q_size(&q)==0)
-        {
-            pthread_cond_wait(&taskReady, &queue_mutex);
-        }
-        if (q_size(&q) > 0)
-        {
-            found = 1;
-            pClient = dequeue(&q);
-            pthread_cond_signal(&taskReady);
-        }
-        pthread_mutex_unlock(&queue_mutex);
-        if (found == 1)
-        {
-            start_function(pClient);
-        }
-    }
-}
-
-
-void masterFunction(int *pClient)
-{
-    pthread_mutex_lock(&queue_mutex);
-    while (is_full(&q))
-    {
-        pthread_cond_wait(&taskReady, &queue_mutex);
-    }
-    enqueue(&q,pClient);
-    pthread_cond_signal(&taskReady);
-    pthread_mutex_unlock(&queue_mutex);
-}
