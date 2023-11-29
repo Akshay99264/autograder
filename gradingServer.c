@@ -77,148 +77,121 @@ int recv_file(int sockfd, char *file_path)
     return 0;
 }
 
-char *compile_command(int id, char *programFile, char *execFile)
+char *compile_command(char *request_id, char *programFile, char *execFile)
 {
 	char *s;
-	char s1[20];
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	memset(s1, 0, sizeof(s1));
 	strcpy(s, "gcc -o ");
 	strcat(s, execFile);
 	strcat(s, "  ");
 	strcat(s, programFile);
-	strcat(s, " 2> files/compiler_err");
-	sprintf(s1, "%d", id);
-	strcat(s, s1);
+	strcat(s, " 2> output/compiler_err");
+	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
 }
 
-char *run_command(int id, char *execFileName)
+char *run_command(char *request_id, char *execFileName)
 {
 	char *s;
-	char s1[20];
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", id);
 	strcpy(s, "./");
 	strcat(s, execFileName);
-	strcat(s, " > files/out");
-	strcat(s, s1);
+	strcat(s, " > output/out");
+	strcat(s, request_id);
 	strcat(s, ".txt");
-	strcat(s, " 2> files/runtime_err");
-	strcat(s, s1);
-	strcat(s, ".txt");
-	return s;
-}
-
-char *output_diff_command(int id)
-{
-	char *s;
-	char s1[20];
-	s = malloc(200 * sizeof(char));
-	memset(s, 0, sizeof(s));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", id);
-	strcpy(s, "diff files/out");
-	strcat(s, s1);
-	strcat(s, ".txt");
-	strcat(s, " actualOutput.txt 1> files/diff_err");
-	strcat(s, s1);
+	strcat(s, " 2> output/runtime_err");
+	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
 }
 
-char *makeProgramFileName(int id)
+char *output_diff_command(char *request_id)
 {
 	char *s;
-	char s1[20];
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", id);
+	strcpy(s, "diff output/out");
+	strcat(s, request_id);
+	strcat(s, ".txt");
+	strcat(s, " actualOutput.txt 1> output/diff_err");
+	strcat(s, request_id);
+	strcat(s, ".txt");
+	return s;
+}
+
+char *makeProgramFileName(char *request_id)
+{
+	char *s;
+	s = malloc(200 * sizeof(char));
+	memset(s, 0, sizeof(s));
 	strcpy(s, "files/file");
-	strcat(s, s1);
+	strcat(s, request_id);
 	strcat(s, ".c");
 	return s;
 }
 
-char *makeCompileErrorFileName(int id)
+char *makeCompileErrorFileName(char *request_id)
 {
 	char *s;
-	char s1[20];
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", id);
-	strcpy(s, "files/compiler_err");
-	strcat(s, s1);
+	strcpy(s, "output/compiler_err");
+	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
 }
 
-char *makeRuntimeErrorFileName(int id)
+char *makeRuntimeErrorFileName(char *request_id)
 {
 	char *s;
-	char s1[20];
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", id);
-	strcpy(s, "files/runtime_err");
-	strcat(s, s1);
+	strcpy(s, "output/runtime_err");
+	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
 }
 
-char *makeOutputFileName(int id)
+char *makeOutputFileName(char *request_id)
 {
 	char *s;
-	char s1[20];
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", id);
 	strcpy(s, "files/out");
-	strcat(s, s1);
+	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
 }
 
-char *makeExecFileName(int id)
+char *makeExecFileName(char *request_id)
 {
 
 	char *s;
-	char s1[20];
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", id);
-	strcpy(s, "files/prog");
-	strcat(s, s1);
+	strcpy(s, "output/prog");
+	strcat(s, request_id);
 	return s;
 }
 
-char *makeOutputDiffFileName(int id)
+char *makeOutputDiffFileName(char *request_id)
 {
 
 	char *s;
-	char s1[20];
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", id);
 	strcpy(s, "files/diff_err");
-	strcat(s, s1);
+	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
 }
 
 void *grader(int *sockfd)
 {
-int newsockfd = *(int *)sockfd;
+    int newsockfd = *(int *)sockfd;
     int n;
     char *programFile, *execFile, *compileErrorFile, *runtimeErrorFile, *outputFile, *outputDiffFile;
     programFile = makeProgramFileName((int)pthread_self());
