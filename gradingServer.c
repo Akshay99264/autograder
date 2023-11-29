@@ -232,6 +232,31 @@ char *insertQuery(char *request_id, int status, char *error)
 	return s;
 }
 
+char *updateQuery(char *request_id, int status, char *error)
+{
+
+	char *s;
+	char s1[5];
+	
+	s = malloc(2000 * sizeof(char));
+	memset(s1, 0, sizeof(s1));
+	sprintf(s1, "%d", status);
+	memset(s, 0, sizeof(s));
+	strcpy(s, "UPDATE grading_requests SET status = ");
+	// strcat(s, "',");
+	strcat(s, s1);         // status
+	if(sizeof(error) > 0){
+		strcat(s, ",error = '");
+		strcat(s, error);      // error
+		strcat(s, "'");
+	}
+    strcat(s, " WHERE id ='");
+	strcat(s, request_id); // request id
+    strcat(s, "'");
+	// strcat(s, ")");
+	return s;
+}
+
 void *grader(int *sockfd)
 {
 	int newsockfd = *(int *)sockfd;
@@ -271,7 +296,6 @@ void *grader(int *sockfd)
 		char buff[2];
 		strcpy(buff,"");
 		char *query = insertQuery(request_id, 0, buff);
-		printf("%s------------query\n",query);
 		PQclear(res);
 		res = PQexec(conn, query);
 		if(PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -331,7 +355,7 @@ void evaluate_file(char *request_id)
             strcat(compilerErrorBuffer, tempCompilerErrorBuffer);
 
             // save to database
-			char *query = insertQuery(request_id, 2, compilerErrorBuffer);
+			char *query = updateQuery(request_id, 2, compilerErrorBuffer);
 			PQclear(res);
 		    res = PQexec(conn, query);
 
@@ -353,7 +377,7 @@ void evaluate_file(char *request_id)
             strcat(runtimeErrorBuffer, tempRuntimeErrorBuffer);
 
             // save to database
-            char *query = insertQuery(request_id, 3, runtimeErrorBuffer);
+            char *query = updateQuery(request_id, 3, runtimeErrorBuffer);
 			PQclear(res);
 		    res = PQexec(conn, query);
 			fclose(f);
@@ -374,7 +398,7 @@ void evaluate_file(char *request_id)
             strcat(diffErrorBuffer, tempDiffErrorBuffer);
             
             // save to database
-			char *query = insertQuery(request_id, 4, diffErrorBuffer);
+			char *query = updateQuery(request_id, 4, diffErrorBuffer);
 			PQclear(res);
 		    res = PQexec(conn, query);
 			fclose(f);
@@ -383,7 +407,7 @@ void evaluate_file(char *request_id)
         {
             // Send success message
 			char buff[1];
-			char *query = insertQuery(request_id, 5, buff);
+			char *query = updateQuery(request_id, 5, buff);
 			PQclear(res);
 		    res = PQexec(conn, query);
             // save to database
