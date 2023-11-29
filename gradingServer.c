@@ -27,6 +27,17 @@ pthread_mutex_t task_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t taskReady = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t uuid_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// evaluation threads 
+void *eval_thread_function(void *arg);
+void eval_enqueue(char *request_id);
+void eval_masterFunc();
+char *eval_dequeue();
+int eval_front = 0, eval_rear = 0, eval_count = 0, eval_found = 0, eval_taskCount = 0;
+char *eval_queue[QUEUE_SIZE];
+pthread_mutex_t eval_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t eval_task_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t eval_taskReady = PTHREAD_COND_INITIALIZER;
+
 void error(char *msg)
 {
 	perror(msg);
@@ -237,6 +248,93 @@ void *grader(int *sockfd)
 
 }
 
+void evaluate_file(char *request_id)
+{
+    char *programFile, *execFile, *compileErrorFile, *runtimeErrorFile, *outputFile, *outputDiffFile;
+    programFile = makeProgramFileName(request_id);
+    execFile = makeExecFileName(request_id);
+    compileErrorFile = makeCompileErrorFileName(request_id);
+    runtimeErrorFile = makeRuntimeErrorFileName(request_id);
+    outputFile = makeOutputFileName(request_id);
+    outputDiffFile = makeOutputDiffFileName(request_id);
+
+    char *comp_command, *r_command, *diff_command;
+    comp_command = compile_command(request_id, programFile, execFile);
+    r_command = run_command(request_id, execFile);
+    diff_command = output_diff_command(request_id);
+
+    while (1)
+    {
+        if (system(comp_command) != 0)
+        {
+            // Handle compiler error
+            FILE *f = fopen(compileErrorFile, "rb");
+            fseek(f, 0, SEEK_END);
+            int len = ftell(f);
+            rewind(f);
+            char tempCompilerErrorBuffer[len];
+            size_t bytes_read = fread(tempCompilerErrorBuffer, 1, sizeof(tempCompilerErrorBuffer), f);
+            tempCompilerErrorBuffer[bytes_read] = '\0';
+            char compilerErrorBuffer[bytes_read + 16];
+            memset(compilerErrorBuffer, 0, sizeof(compilerErrorBuffer));
+            strcat(compilerErrorBuffer, "COMPILER ERROR\n");
+            strcat(compilerErrorBuffer, tempCompilerErrorBuffer);
+
+            // save to database
+
+			fclose(f);
+        }
+        else if (system(r_command) != 0)
+        {
+            // Handle runtime time error
+            FILE *f = fopen(runtimeErrorFile, "r");
+            fseek(f, 0, SEEK_END);
+            int len = ftell(f);
+            rewind(f);
+            char tempRuntimeErrorBuffer[len];
+            size_t bytes_read = fread(tempRuntimeErrorBuffer, 1, sizeof(tempRuntimeErrorBuffer), f);
+            tempRuntimeErrorBuffer[bytes_read] = '\0';
+            char runtimeErrorBuffer[bytes_read + 15];
+            memset(runtimeErrorBuffer, 0, sizeof(runtimeErrorBuffer));
+            strcat(runtimeErrorBuffer, "RUNTIME ERROR\n");
+            strcat(runtimeErrorBuffer, tempRuntimeErrorBuffer);
+
+            // save to database
+            
+			fclose(f);
+        }
+        else if (system(diff_command) != 0)
+        {
+            // Handle output difference
+            FILE *f = fopen(outputDiffFile, "r");
+            fseek(f, 0, SEEK_END);
+            int len = ftell(f);
+            rewind(f);
+            char tempDiffErrorBuffer[len];
+            size_t bytes_read = fread(tempDiffErrorBuffer, 1, sizeof(tempDiffErrorBuffer), f);
+            tempDiffErrorBuffer[bytes_read] = '\0';
+            char diffErrorBuffer[bytes_read + 18];
+            memset(diffErrorBuffer, 0, sizeof(diffErrorBuffer));
+            strcat(diffErrorBuffer, "OUTPUT DIFFRENCE\n");
+            strcat(diffErrorBuffer, tempDiffErrorBuffer);
+            
+            // save to database
+
+			fclose(f);
+        }
+        else
+        {
+            // Send success message
+
+            // save to database
+        }
+    }
+    free(programFile);
+    free(execFile);
+    free(comp_command);
+    free(r_command);
+}
+
 int main(int argc, char *argv[])
 {
 	int sockfd, newsockfd, portno;
@@ -252,11 +350,19 @@ int main(int argc, char *argv[])
 	}
 
 	int MAX_THREADS = atoi(argv[2]);
-	pthread_t threadpool[MAX_THREADS];
 
+    // receive file thread pool
+	pthread_t threadpool[MAX_THREADS];
 	for (int i = 0; i < MAX_THREADS; i++)
 	{
 		pthread_create(&threadpool[i], NULL, thread_function, NULL);
+	}
+
+    // evaluation thread pool
+    pthread_t eval_threadpool[MAX_THREADS];
+	for (int i = 0; i < MAX_THREADS; i++)
+	{
+		pthread_create(&eval_threadpool[i], NULL, eval_thread_function, NULL);
 	}
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -285,10 +391,14 @@ int main(int argc, char *argv[])
 		int *pClient = malloc(sizeof(int));
 		*pClient = newsockfd;
 		masterFunc(pClient);
+        eval_masterFunc();
 	}
 
 	pthread_mutex_destroy(&queue_mutex);
 	pthread_cond_destroy(&taskReady);
+
+    pthread_mutex_destroy(&eval_queue_mutex);
+	pthread_cond_destroy(&eval_taskReady);
 
 	close(sockfd);
 	return 0;
@@ -362,6 +472,82 @@ int *dequeue()
 	{
 		front = (front + 1) % QUEUE_SIZE;
 		item = queue[front];
+		return item;
+	}
+}
+
+// evaluation threads function
+void *eval_thread_function(void *arg)
+{
+	while (1)
+	{
+		char *pClient;
+		pthread_mutex_lock(&eval_queue_mutex);
+
+		while (eval_taskCount == 0)
+		{
+			pthread_cond_wait(&eval_taskReady, &eval_queue_mutex);
+		}
+		if (eval_taskCount > 0)
+		{
+			eval_found = 1;
+			pClient = eval_dequeue();
+			eval_taskCount--;
+			pthread_cond_signal(&eval_taskReady);
+		}
+
+		pthread_mutex_unlock(&eval_queue_mutex);
+
+		if (eval_found == 1)
+			evaluate_file(pClient);
+	}
+}
+
+void eval_masterFunc()
+{
+	pthread_mutex_lock(&eval_queue_mutex);
+
+	while ((eval_rear + 1) % QUEUE_SIZE == eval_front)
+	{
+		pthread_cond_wait(&eval_taskReady, &eval_queue_mutex);
+	}
+
+    // get uuid from database
+
+    char *request_id;
+	eval_enqueue(request_id);
+	eval_taskCount++;
+	pthread_cond_signal(&eval_taskReady);
+	pthread_mutex_unlock(&eval_queue_mutex);
+}
+
+void eval_enqueue(char *request_id)
+{
+	eval_rear = (eval_rear + 1) % QUEUE_SIZE;
+	if (eval_front == eval_rear)
+	{
+		printf("\nOverflow\n");
+		if (eval_rear == 0)
+			eval_rear = QUEUE_SIZE - 1;
+		else
+			eval_rear--;
+	}
+	else
+	{
+		eval_queue[eval_rear] = request_id;
+	}
+}
+char *eval_dequeue()
+{
+	char *item;
+	if (eval_front == eval_rear)
+	{
+		printf("\nThe Queue is empty\n");
+	}
+	else
+	{
+		eval_front = (eval_front + 1) % QUEUE_SIZE;
+		item = eval_queue[eval_front];
 		return item;
 	}
 }
