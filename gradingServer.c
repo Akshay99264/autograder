@@ -20,14 +20,14 @@ int *dequeue();
 const int BUFFER_SIZE = 1024;
 const int MAX_FILE_SIZE_BYTES = 4;
 int front = 0, rear = 0, count = 0, found = 0, taskCount = 0;
-char uuid_str[37]; 
+char uuid_str[37];
 int *queue[QUEUE_SIZE];
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t task_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t taskReady = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t uuid_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// evaluation threads 
+// evaluation threads
 void *eval_thread_function(void *arg);
 void eval_enqueue(char *request_id);
 void eval_masterFunc();
@@ -101,7 +101,7 @@ char *compile_command(char *request_id, char *programFile, char *execFile)
 	strcat(s, execFile);
 	strcat(s, "  ");
 	strcat(s, programFile);
-	strcat(s, " 2> output/compiler_err");
+	strcat(s, " 2> output/compiler_err_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
@@ -117,7 +117,7 @@ char *run_command(char *request_id, char *execFileName)
 	strcat(s, " > output/out");
 	strcat(s, request_id);
 	strcat(s, ".txt");
-	strcat(s, " 2> output/runtime_err");
+	strcat(s, " 2> output/runtime_err_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
@@ -131,7 +131,7 @@ char *output_diff_command(char *request_id)
 	strcpy(s, "diff output/out");
 	strcat(s, request_id);
 	strcat(s, ".txt");
-	strcat(s, " actualOutput.txt 1> output/diff_err");
+	strcat(s, " actualOutput.txt 1> output/diff_err_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
@@ -142,7 +142,7 @@ char *makeProgramFileName(char *request_id)
 	char *s;
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "files/file");
+	strcpy(s, "files/file_");
 	strcat(s, request_id);
 	strcat(s, ".c");
 	return s;
@@ -153,7 +153,7 @@ char *makeCompileErrorFileName(char *request_id)
 	char *s;
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "output/compiler_err");
+	strcpy(s, "output/compiler_err_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
@@ -164,7 +164,7 @@ char *makeRuntimeErrorFileName(char *request_id)
 	char *s;
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "output/runtime_err");
+	strcpy(s, "output/runtime_err_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
@@ -175,7 +175,7 @@ char *makeOutputFileName(char *request_id)
 	char *s;
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "files/out");
+	strcpy(s, "files/out_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
@@ -187,7 +187,7 @@ char *makeExecFileName(char *request_id)
 	char *s;
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "output/prog");
+	strcpy(s, "output/prog_");
 	strcat(s, request_id);
 	return s;
 }
@@ -198,7 +198,7 @@ char *makeOutputDiffFileName(char *request_id)
 	char *s;
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "files/diff_err");
+	strcpy(s, "files/diff_err_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
@@ -208,6 +208,7 @@ void *grader(int *sockfd)
 {
 	int newsockfd = *(int *)sockfd;
 	int n;
+	char request_type[10];
 	char *programFile, *execFile, *compileErrorFile, *runtimeErrorFile, *outputFile, *outputDiffFile;
 	// execFile = makeExecFileName((int)pthread_self());
 	// compileErrorFile = makeCompileErrorFileName((int)pthread_self());
@@ -219,13 +220,17 @@ void *grader(int *sockfd)
 	// comp_command = compile_command((int)pthread_self(), programFile, execFile);
 	// r_command = run_command((int)pthread_self(), execFile);
 	// diff_command = output_diff_command((int)pthread_self());
-
+	n = recv(newsockfd, request_type, sizeof(request_type), 0);
+	if (n < 0)
+		error("ERROR on accept request type");
+	if (strcmp(request_type, "new") == 0 || strcmp(request_type, "New") == 0)
+	{
 		uuid_t uuid;
-		phtread_mutex_lock(&uuid_mutex);
+		pthread_mutex_lock(&uuid_mutex);
 		uuid_generate(uuid);
 		uuid_unparse(uuid, uuid_str);
 		pthread_mutex_unlock(&uuid_mutex);
-		
+
 		programFile = makeProgramFileName(uuid_str);
 
 		if (recv_file(newsockfd, programFile) != 0)
@@ -235,104 +240,109 @@ void *grader(int *sockfd)
 		}
 
 		char response[90];
-		strcat(response,"I got your response and this is your request ID: ");
-		strcat(response,uuid_str);
-		n=send(newsockfd,response,sizeof(response),0);
-		if(n<0)
+		strcat(response, "I got your response and this is your request ID: ");
+		strcat(response, uuid_str);
+		n = send(newsockfd, response, sizeof(response) - 2, 0);
+		if (n < 0)
 		{
 			perror("Error sending response\n");
 			close(newsockfd);
-			return -1;
+			return NULL;
 		}
 		close(newsockfd);
+	}
+	else
+	{
+		//code to handle check status case
 
+	}
 }
 
 void evaluate_file(char *request_id)
 {
-    char *programFile, *execFile, *compileErrorFile, *runtimeErrorFile, *outputFile, *outputDiffFile;
-    programFile = makeProgramFileName(request_id);
-    execFile = makeExecFileName(request_id);
-    compileErrorFile = makeCompileErrorFileName(request_id);
-    runtimeErrorFile = makeRuntimeErrorFileName(request_id);
-    outputFile = makeOutputFileName(request_id);
-    outputDiffFile = makeOutputDiffFileName(request_id);
+	char *programFile, *execFile, *compileErrorFile, *runtimeErrorFile, *outputFile, *outputDiffFile;
+	programFile = makeProgramFileName(request_id);
+	execFile = makeExecFileName(request_id);
+	compileErrorFile = makeCompileErrorFileName(request_id);
+	runtimeErrorFile = makeRuntimeErrorFileName(request_id);
+	outputFile = makeOutputFileName(request_id);
+	outputDiffFile = makeOutputDiffFileName(request_id);
 
-    char *comp_command, *r_command, *diff_command;
-    comp_command = compile_command(request_id, programFile, execFile);
-    r_command = run_command(request_id, execFile);
-    diff_command = output_diff_command(request_id);
+	char *comp_command, *r_command, *diff_command;
+	comp_command = compile_command(request_id, programFile, execFile);
+	r_command = run_command(request_id, execFile);
+	diff_command = output_diff_command(request_id);
 
-    while (1)
-    {
-        if (system(comp_command) != 0)
-        {
-            // Handle compiler error
-            FILE *f = fopen(compileErrorFile, "rb");
-            fseek(f, 0, SEEK_END);
-            int len = ftell(f);
-            rewind(f);
-            char tempCompilerErrorBuffer[len];
-            size_t bytes_read = fread(tempCompilerErrorBuffer, 1, sizeof(tempCompilerErrorBuffer), f);
-            tempCompilerErrorBuffer[bytes_read] = '\0';
-            char compilerErrorBuffer[bytes_read + 16];
-            memset(compilerErrorBuffer, 0, sizeof(compilerErrorBuffer));
-            strcat(compilerErrorBuffer, "COMPILER ERROR\n");
-            strcat(compilerErrorBuffer, tempCompilerErrorBuffer);
+	while (1)
+	{
+		if (system(comp_command) != 0)
+		{
+			// Handle compiler error
+			FILE *f = fopen(compileErrorFile, "rb");
+			fseek(f, 0, SEEK_END);
+			int len = ftell(f);
+			rewind(f);
+			char tempCompilerErrorBuffer[len];
+			size_t bytes_read = fread(tempCompilerErrorBuffer, 1, sizeof(tempCompilerErrorBuffer), f);
+			tempCompilerErrorBuffer[bytes_read] = '\0';
+			char compilerErrorBuffer[bytes_read + 16];
+			memset(compilerErrorBuffer, 0, sizeof(compilerErrorBuffer));
+			strcat(compilerErrorBuffer, "COMPILER ERROR\n");
+			strcat(compilerErrorBuffer, tempCompilerErrorBuffer);
 
-            // save to database
-
-			fclose(f);
-        }
-        else if (system(r_command) != 0)
-        {
-            // Handle runtime time error
-            FILE *f = fopen(runtimeErrorFile, "r");
-            fseek(f, 0, SEEK_END);
-            int len = ftell(f);
-            rewind(f);
-            char tempRuntimeErrorBuffer[len];
-            size_t bytes_read = fread(tempRuntimeErrorBuffer, 1, sizeof(tempRuntimeErrorBuffer), f);
-            tempRuntimeErrorBuffer[bytes_read] = '\0';
-            char runtimeErrorBuffer[bytes_read + 15];
-            memset(runtimeErrorBuffer, 0, sizeof(runtimeErrorBuffer));
-            strcat(runtimeErrorBuffer, "RUNTIME ERROR\n");
-            strcat(runtimeErrorBuffer, tempRuntimeErrorBuffer);
-
-            // save to database
-            
-			fclose(f);
-        }
-        else if (system(diff_command) != 0)
-        {
-            // Handle output difference
-            FILE *f = fopen(outputDiffFile, "r");
-            fseek(f, 0, SEEK_END);
-            int len = ftell(f);
-            rewind(f);
-            char tempDiffErrorBuffer[len];
-            size_t bytes_read = fread(tempDiffErrorBuffer, 1, sizeof(tempDiffErrorBuffer), f);
-            tempDiffErrorBuffer[bytes_read] = '\0';
-            char diffErrorBuffer[bytes_read + 18];
-            memset(diffErrorBuffer, 0, sizeof(diffErrorBuffer));
-            strcat(diffErrorBuffer, "OUTPUT DIFFRENCE\n");
-            strcat(diffErrorBuffer, tempDiffErrorBuffer);
-            
-            // save to database
+			// save to database
 
 			fclose(f);
-        }
-        else
-        {
-            // Send success message
+		}
+		else if (system(r_command) != 0)
+		{
+			// Handle runtime time error
+			FILE *f = fopen(runtimeErrorFile, "r");
+			fseek(f, 0, SEEK_END);
+			int len = ftell(f);
+			rewind(f);
+			char tempRuntimeErrorBuffer[len];
+			size_t bytes_read = fread(tempRuntimeErrorBuffer, 1, sizeof(tempRuntimeErrorBuffer), f);
+			tempRuntimeErrorBuffer[bytes_read] = '\0';
+			char runtimeErrorBuffer[bytes_read + 15];
+			memset(runtimeErrorBuffer, 0, sizeof(runtimeErrorBuffer));
+			strcat(runtimeErrorBuffer, "RUNTIME ERROR\n");
+			strcat(runtimeErrorBuffer, tempRuntimeErrorBuffer);
 
-            // save to database
-        }
-    }
-    free(programFile);
-    free(execFile);
-    free(comp_command);
-    free(r_command);
+			// save to database
+
+			fclose(f);
+		}
+		else if (system(diff_command) != 0)
+		{
+			// Handle output difference
+			FILE *f = fopen(outputDiffFile, "r");
+			fseek(f, 0, SEEK_END);
+			int len = ftell(f);
+			rewind(f);
+			char tempDiffErrorBuffer[len];
+			size_t bytes_read = fread(tempDiffErrorBuffer, 1, sizeof(tempDiffErrorBuffer), f);
+			tempDiffErrorBuffer[bytes_read] = '\0';
+			char diffErrorBuffer[bytes_read + 18];
+			memset(diffErrorBuffer, 0, sizeof(diffErrorBuffer));
+			strcat(diffErrorBuffer, "OUTPUT DIFFRENCE\n");
+			strcat(diffErrorBuffer, tempDiffErrorBuffer);
+
+			// save to database
+
+			fclose(f);
+		}
+		else
+		{
+			// Send success message
+
+			// save to database
+		}
+	}
+	free(programFile);
+	free(execFile);
+	free(comp_command);
+	free(r_command);
 }
 
 int main(int argc, char *argv[])
@@ -351,15 +361,15 @@ int main(int argc, char *argv[])
 
 	int MAX_THREADS = atoi(argv[2]);
 
-    // receive file thread pool
+	// receive file thread pool
 	pthread_t threadpool[MAX_THREADS];
 	for (int i = 0; i < MAX_THREADS; i++)
 	{
 		pthread_create(&threadpool[i], NULL, thread_function, NULL);
 	}
 
-    // evaluation thread pool
-    pthread_t eval_threadpool[MAX_THREADS];
+	// evaluation thread pool
+	pthread_t eval_threadpool[MAX_THREADS];
 	for (int i = 0; i < MAX_THREADS; i++)
 	{
 		pthread_create(&eval_threadpool[i], NULL, eval_thread_function, NULL);
@@ -388,16 +398,17 @@ int main(int argc, char *argv[])
 		newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
 		if (newsockfd < 0)
 			error("ERROR on accept");
+
 		int *pClient = malloc(sizeof(int));
 		*pClient = newsockfd;
 		masterFunc(pClient);
-        eval_masterFunc();
+		eval_masterFunc();
 	}
 
 	pthread_mutex_destroy(&queue_mutex);
 	pthread_cond_destroy(&taskReady);
 
-    pthread_mutex_destroy(&eval_queue_mutex);
+	pthread_mutex_destroy(&eval_queue_mutex);
 	pthread_cond_destroy(&eval_taskReady);
 
 	close(sockfd);
@@ -512,9 +523,9 @@ void eval_masterFunc()
 		pthread_cond_wait(&eval_taskReady, &eval_queue_mutex);
 	}
 
-    // get uuid from database
+	// get uuid from database
 
-    char *request_id;
+	char *request_id;
 	eval_enqueue(request_id);
 	eval_taskCount++;
 	pthread_cond_signal(&eval_taskReady);
