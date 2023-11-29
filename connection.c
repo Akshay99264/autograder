@@ -4,7 +4,7 @@
 
 int main() {
     // Initialize a PostgreSQL connection object
-    PGconn *conn = PQconnectdb("dbname=autograder user=postgres password=Akshay#123 host=localhost");
+    PGconn *conn = PQconnectdb("dbname=autograder user=postgres password=1234 host=localhost");
     PGresult *res;
     // Check for a successful connection
     if (PQstatus(conn) != CONNECTION_OK) {
@@ -13,7 +13,7 @@ int main() {
         return 1;
     }
 
-    const char *createTableSQL = "CREATE TABLE IF NOT EXISTS mytable (id serial primary key, name text)";
+    const char *createTableSQL = "CREATE TABLE IF NOT EXISTS mytable (id uuid primary key, status int, error text)";
     res = PQexec(conn, createTableSQL);
 
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
