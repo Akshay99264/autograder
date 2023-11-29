@@ -60,23 +60,37 @@ int send_file(int sockfd, char *file_path)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 7)
+    if (argc != 5)
     {
-        perror("./submit  <serverIP:port>  <sourceCodeFileTobeGraded>  <loopNum> <sleepTimeSeconds> <timeout-seconds>\n");
+        perror("./submit <new|status> <serverIP> <port>  <sourceCodeFileTobeGraded|requestID>\n");
         return -1;
     }
 
-    char server_ip[40], ip_port[40], file_path[256];
-    int server_port, loop_num, sleep_time, successfull_requests, timeout_count = 0, error_count = 0;
+    char server_ip[40], ip_port[40], file_path[256], requestID[38], request_type[10];
+    int server_port, loop_num, sleep_time, successfull_requests, timeout_count = 0, error_count = 0, request_flag = 0;
     double total_response_time = 0, throughput = 0, avg_response_time = 0, request_rate = 0, goodput = 0, timeout_rate = 0, error_rate = 0;
     struct timeval start, end, loop_start, loop_end;
 
-    strcpy(server_ip, argv[1]);
-    server_port = atoi(argv[2]);
-    strcpy(file_path, argv[3]);
-    loop_num = atoi(argv[4]);
-    successfull_requests = loop_num;
-    sleep_time = atoi(argv[5]);
+    strcpy(request_type,argv[1]);
+    strcpy(server_ip, argv[2]);
+    server_port = atoi(argv[3]);
+
+    if (strcmp(request_type, "status") == 0 || strcmp(request_type, "Status") == 0)
+    {
+        request_flag = 0;
+        strcpy(requestID, argv[4]);      
+    }
+    else if (strcmp(request_type, "new") == 0 || strcmp(request_type, "New") == 0)
+    {
+        request_flag = 1;
+        strcpy(file_path, argv[4]);   
+    }
+    else
+    {
+        perror("./submit <new | status>  <serverIP> <port>  <sourceCodeFileTobeGraded | requestID>\n");
+        return -1;
+    }
+
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd == -1)
@@ -107,77 +121,41 @@ int main(int argc, char *argv[])
         }
     }
 
-    struct timeval timeout;
-    timeout.tv_sec = atoi(argv[6]);
-    timeout.tv_usec = 0;
-
-    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
-        printf("timeout");
-
-    gettimeofday(&loop_start, NULL);
-    for (int i = 0; i < loop_num; i++)
+    int n=send(sockfd,request_type,sizeof(request_type),0);
+    if(n<0)
     {
-        gettimeofday(&start, NULL);
-        bool error_flag = false;
+        perror("ERROR sending request type");
+        close(sockfd);
+        return -1;
+    }
+    if(request_flag == 1)
+    {
+        
         if (send_file(sockfd, file_path) != 0)
         {
             printf("Error sending source file\n");
-            successfull_requests--;
-            error_count++;
-            error_flag = true;
+            return 0;
         }
-
-        int bytes_read;
-        char buffer[BUFFER_SIZE];
-        bytes_read = read(sockfd, buffer, sizeof(buffer));
-        if (bytes_read < 0)
-        {
-            if (errno == EWOULDBLOCK || errno == EAGAIN)
-            {
-                printf("Timeout occured\n");
-                successfull_requests--;
-                timeout_count++;
-                flag = 0;
-            }
-            else
-            {
-                printf("ERROR reading from socket");
-                if (!error_flag)
-                {
-                    error_count++;
-                    successfull_requests--;
-                    flag = 0;
-                }
-            }
-        }
-        if (flag)
-        {
-            buffer[bytes_read] = '\0';
-            write(STDOUT_FILENO, "Server Response: ", 17);
-            write(STDOUT_FILENO, buffer, bytes_read);
-        }
-
-        printf("\n");
-        gettimeofday(&end, NULL);
-
-        if (i != loop_num)
-            sleep(sleep_time);
-        double response_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
-        total_response_time = total_response_time + response_time;
+    }
+    else
+    {
+        // code to handle status case;
     }
 
-    gettimeofday(&loop_end, NULL);
-    double loop_time = (loop_end.tv_sec - loop_start.tv_sec) + (loop_end.tv_usec - loop_start.tv_usec) / 1e6;
-    avg_response_time = total_response_time / loop_num;
-    throughput = successfull_requests / loop_time;
-    goodput = successfull_requests / total_response_time;
-    timeout_rate = timeout_count / loop_time;
-    error_rate = error_count / loop_time;
-    request_rate = loop_num / loop_time;
+    int bytes_read;
+    char buffer[BUFFER_SIZE];
+    bytes_read = read(sockfd, buffer, sizeof(buffer));
+    if (bytes_read < 0)
+    {
+        printf("ERROR reading from socket");
+        return 0;
+    }
 
-    // <Average response time>, <Throughput>, <Goodput>, <Timeout rate>, <Error Rate>, <Request Rate>, <Successfull requests>, <Loop time>
-    printf("%f,%f,%f,%f,%f,%f,%d,%f\n", avg_response_time, throughput, goodput, timeout_rate, error_rate, request_rate, successfull_requests, loop_time);
+    buffer[bytes_read] = '\0';
+    write(STDOUT_FILENO, "Server Response: ", 17);
+    write(STDOUT_FILENO, buffer, bytes_read);
 
+    printf("\n");
     close(sockfd);
     return 0;
 }
