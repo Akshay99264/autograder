@@ -219,12 +219,15 @@ char *insertQuery(char *request_id, int status, char *error)
 	memset(s1, 0, sizeof(s1));
 	sprintf(s1, "%d", status);
 	memset(s, 0, sizeof(s));
-	strcpy(s, "INSERT INTO grading_requests VALUES(");
+	strcpy(s, "INSERT INTO grading_requests VALUES('");
 	strcat(s, request_id); // request id
-	strcat(s, ",");
+	strcat(s, "',");
 	strcat(s, s1);         // status
-	strcat(s, ",");
-	strcat(s, error);      // error
+	if(sizeof(error) > 0){
+		strcat(s, ",'");
+		strcat(s, error);      // error
+		strcat(s, "'");
+	}
 	strcat(s, ")");
 	return s;
 }
@@ -266,14 +269,20 @@ void *grader(int *sockfd)
 		
 		// save in database
 		char buff[2];
+		strcpy(buff,"");
 		char *query = insertQuery(request_id, 0, buff);
+		printf("%s------------query\n",query);
 		PQclear(res);
 		res = PQexec(conn, query);
+		if(PQresultStatus(res) != PGRES_COMMAND_OK)
+		{
+			fprintf(stderr,"%s\n",PQerrorMessage(conn));
+		}
 
 		char response[90];
 		strcat(response,"I got your response and this is your request ID: ");
 		strcat(response,request_id);
-		n=send(newsockfd,response,sizeof(response),0);
+		n=send(newsockfd,response,sizeof(response)-2,0);
 		if(n<0)
 		{
 			perror("Error sending response\n");
@@ -425,7 +434,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    const char *createTableSQL = "CREATE TABLE IF NOT EXISTS grading_requests (id serial primary key, name text)";
+    const char *createTableSQL = "CREATE TABLE IF NOT EXISTS grading_requests (id uuid primary key, status int, error text null default null)";
     res = PQexec(conn, createTableSQL);
 
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
