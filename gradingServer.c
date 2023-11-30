@@ -264,11 +264,7 @@ char *filterQuery()
 {
 
 	char *s;
-	char s1[5];
-	
 	s = malloc(2000 * sizeof(char));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", status);
 	memset(s, 0, sizeof(s));
 	strcpy(s, "SECECT id FROM grading_requests WHERE status = 0");
 	return s;
@@ -278,11 +274,8 @@ char *getQuery(char *request_id)
 {
 
 	char *s;
-	char s1[5];
 	
 	s = malloc(2000 * sizeof(char));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", status);
 	memset(s, 0, sizeof(s));
 	strcpy(s, "SECECT status, error FROM grading_requests WHERE request_id = '");
     strcat(s, request_id);
@@ -294,11 +287,8 @@ char *statusUpdateQuery()
 {
 
 	char *s;
-	char s1[5];
 	
 	s = malloc(2000 * sizeof(char));
-	memset(s1, 0, sizeof(s1));
-	sprintf(s1, "%d", status);
 	memset(s, 0, sizeof(s));
 	strcpy(s, "UPDATE grading_requests SET status = 0 WHERE status = 1");
 	return s;
@@ -642,7 +632,7 @@ void *eval_thread_function(void *arg)
     }
 	while (1)
 	{
-        query = filterQuery()
+        query = filterQuery();
         PQclear(res);
 		res = PQexec(conn, query);
 		if(PQresultStatus(res) != PGRES_COMMAND_OK)
