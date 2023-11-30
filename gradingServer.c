@@ -364,37 +364,45 @@ void *grader(int *sockfd)
         char *query = getQuery(request_id);
         PQclear(res);
         res = PQexec(conn, query);
-        int status = atoi(PQgetvalue(res, 0, 0));
-        char *error = PQgetvalue(res, 0, 1);
-        
-        if (status == 0){
-            // not evaluated
-            n = send(newsockfd, "Not evaluated", 14, 0);
+        int rows = PQntuples(res);
+        if (rows == 0){
+            n = send(newsockfd, "Invalid request id", 19, 0);
             if (n < 0)
                 error("ERROR writing to socket");
         }
-        else if (status == 1){
-            // in queue
-            int position = queue_position(request_id);
-            char s1[5];
-            sprintf(s1, "%d", position);
+        else{
+            int status = atoi(PQgetvalue(res, 0, 0));
+            char *error = PQgetvalue(res, 0, 1);
+            
+            if (status == 0){
+                // not evaluated
+                n = send(newsockfd, "Not evaluated", 14, 0);
+                if (n < 0)
+                    error("ERROR writing to socket");
+            }
+            else if (status == 1){
+                // in queue
+                int position = queue_position(request_id);
+                char s1[5];
+                sprintf(s1, "%d", position);
 
-            char s[50];
-            strcat(s, "In Queue at position: ");
-            strcat(s, s1);
-            n = send(newsockfd, s, sizeof(s), 0);
-            if (n < 0)
-                error("ERROR writing to socket");
-        }
-        else if (status == 5){
-            n = send(newsockfd, "PASS", 4, 0);
-            if (n < 0)
-                error("ERROR writing to socket");
-        }
-        else {
-            n = send(newsockfd, error, sizeof(error), 0);
-            if (n < 0)
-                error("ERROR writing to socket");
+                char s[50];
+                strcat(s, "In Queue at position: ");
+                strcat(s, s1);
+                n = send(newsockfd, s, sizeof(s), 0);
+                if (n < 0)
+                    error("ERROR writing to socket");
+            }
+            else if (status == 5){
+                n = send(newsockfd, "PASS", 4, 0);
+                if (n < 0)
+                    error("ERROR writing to socket");
+            }
+            else {
+                n = send(newsockfd, error, sizeof(error), 0);
+                if (n < 0)
+                    error("ERROR writing to socket");
+            }
         }
 	}
 }
