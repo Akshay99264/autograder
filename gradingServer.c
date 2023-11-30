@@ -28,6 +28,9 @@ pthread_mutex_t task_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t taskReady = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t uuid_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+pthread_mutex_t res_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t res_ready = PTHREAD_COND_INITIALIZER;
+
 // evaluation threads
 void *eval_thread_function(void *arg);
 void eval_enqueue(char *request_id);
@@ -257,6 +260,50 @@ char *updateQuery(char *request_id, int status, char *error)
 	return s;
 }
 
+char *filterQuery()
+{
+
+	char *s;
+	char s1[5];
+	
+	s = malloc(2000 * sizeof(char));
+	memset(s1, 0, sizeof(s1));
+	sprintf(s1, "%d", status);
+	memset(s, 0, sizeof(s));
+	strcpy(s, "SECECT id FROM grading_requests WHERE status = 0");
+	return s;
+}
+
+char *getQuery(char *request_id)
+{
+
+	char *s;
+	char s1[5];
+	
+	s = malloc(2000 * sizeof(char));
+	memset(s1, 0, sizeof(s1));
+	sprintf(s1, "%d", status);
+	memset(s, 0, sizeof(s));
+	strcpy(s, "SECECT status, error FROM grading_requests WHERE request_id = '");
+    strcat(s, request_id);
+    strcat(s, "'");
+	return s;
+}
+
+char *statusUpdateQuery()
+{
+
+	char *s;
+	char s1[5];
+	
+	s = malloc(2000 * sizeof(char));
+	memset(s1, 0, sizeof(s1));
+	sprintf(s1, "%d", status);
+	memset(s, 0, sizeof(s));
+	strcpy(s, "UPDATE grading_requests SET status = 0 WHERE status = 1");
+	return s;
+}
+
 void *grader(int *sockfd)
 {
 	int newsockfd = *(int *)sockfd;
@@ -302,6 +349,9 @@ void *grader(int *sockfd)
 		{
 			fprintf(stderr,"%s\n",PQerrorMessage(conn));
 		}
+
+        // signal to evalution thread
+        pthread_cond_signal(&res_ready);
 
 		char response[90];
 		strcat(response,"I got your response and this is your request ID: ");
@@ -583,27 +633,51 @@ int *dequeue()
 // evaluation threads function
 void *eval_thread_function(void *arg)
 {
+    char *query = statusUpdateQuery()
+    PQclear(res);
+    res = PQexec(conn, query);
+    if(PQresultStatus(res) != PGRES_COMMAND_OK)
+    {
+        fprintf(stderr,"%s\n",PQerrorMessage(conn));
+    }
 	while (1)
 	{
-		char *pClient;
-		pthread_mutex_lock(&eval_queue_mutex);
-
-		while (eval_taskCount == 0)
+        query = filterQuery()
+        PQclear(res);
+		res = PQexec(conn, query);
+		if(PQresultStatus(res) != PGRES_COMMAND_OK)
 		{
-			pthread_cond_wait(&eval_taskReady, &eval_queue_mutex);
+			fprintf(stderr,"%s\n",PQerrorMessage(conn));
 		}
-		if (eval_taskCount > 0)
-		{
-			eval_found = 1;
-			pClient = eval_dequeue();
-			eval_taskCount--;
-			pthread_cond_signal(&eval_taskReady);
-		}
+        int rows = PQntuples(res);
 
-		pthread_mutex_unlock(&eval_queue_mutex);
+        pthread_mutex_lock(&res_mutex);
+        while (rows == 0)
+        {
+            pthread_cond_wait(&res_ready, &res_mutex);
+        }
+        pthread_mutex_unlock(&res_mutex);
 
-		if (eval_found == 1)
-			evaluate_file(pClient);
+        for(int i=0; i<rows; i++) {
+            char *pClient = PQgetvalue(res, i, 0);
+            pthread_mutex_lock(&eval_queue_mutex);
+            while (eval_taskCount == 0)
+            {
+                pthread_cond_wait(&eval_taskReady, &eval_queue_mutex);
+            }
+            if (eval_taskCount > 0)
+            {
+                eval_found = 1;
+                pClient = eval_dequeue();
+                eval_taskCount--;
+                pthread_cond_signal(&eval_taskReady);
+            }
+
+            pthread_mutex_unlock(&eval_queue_mutex);
+
+            if (eval_found == 1)
+                evaluate_file(pClient);
+        }
 	}
 }
 
