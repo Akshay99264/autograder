@@ -55,7 +55,7 @@ void error(char *msg)
 int recv_file(int sockfd, char *file_path)
 {
 	char buffer[BUFFER_SIZE];
-	bzero(buffer, BUFFER_SIZE);
+	memset(buffer,0,sizeof(buffer));
 	FILE *file = fopen(file_path, "wb");
 
 	if (!file)
@@ -266,7 +266,7 @@ char *filterQuery()
 	char *s;
 	s = malloc(2000 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "SECECT id FROM grading_requests WHERE status = 0");
+	strcpy(s, "SELECT id FROM grading_requests WHERE status = 0");
 	return s;
 }
 
@@ -526,8 +526,10 @@ int main(int argc, char *argv[])
 	clilen = sizeof(cli_addr);
 	int reqID = 0;
 
+	eval_masterFunc();
 	while (1)
 	{
+		
 		newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
 		if (newsockfd < 0)
 			error("ERROR on accept");
@@ -535,7 +537,6 @@ int main(int argc, char *argv[])
 		int *pClient = malloc(sizeof(int));
 		*pClient = newsockfd;
 		masterFunc(pClient);
-		eval_masterFunc();
 	}
 
 	pthread_mutex_destroy(&queue_mutex);
@@ -623,7 +624,34 @@ int *dequeue()
 // evaluation threads function
 void *eval_thread_function(void *arg)
 {
-    char *query = statusUpdateQuery()
+	while(1){
+		char *pClient; 
+		pthread_mutex_lock(&eval_queue_mutex);
+		while (eval_taskCount == 0)
+		{
+			pthread_cond_wait(&eval_taskReady, &eval_queue_mutex);
+		}
+		if (eval_taskCount > 0)
+		{
+			eval_found = 1;
+			pClient = eval_dequeue();
+			eval_taskCount--;
+			pthread_cond_signal(&eval_taskReady);
+		}
+
+		pthread_mutex_unlock(&eval_queue_mutex);
+
+		if (eval_found == 1)
+			evaluate_file(pClient);
+	}
+	
+}
+
+void eval_masterFunc()
+{
+	sleep(2);
+    char *query = statusUpdateQuery();
+	perror(query);
     PQclear(res);
     res = PQexec(conn, query);
     if(PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -633,6 +661,7 @@ void *eval_thread_function(void *arg)
 	while (1)
 	{
         query = filterQuery();
+		printf("%s\n", query);
         PQclear(res);
 		res = PQexec(conn, query);
 		if(PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -640,7 +669,7 @@ void *eval_thread_function(void *arg)
 			fprintf(stderr,"%s\n",PQerrorMessage(conn));
 		}
         int rows = PQntuples(res);
-
+		printf("num rows: %d\n", rows);
         pthread_mutex_lock(&res_mutex);
         while (rows == 0)
         {
@@ -649,44 +678,32 @@ void *eval_thread_function(void *arg)
         pthread_mutex_unlock(&res_mutex);
 
         for(int i=0; i<rows; i++) {
-            char *pClient = PQgetvalue(res, i, 0);
-            pthread_mutex_lock(&eval_queue_mutex);
-            while (eval_taskCount == 0)
-            {
-                pthread_cond_wait(&eval_taskReady, &eval_queue_mutex);
-            }
-            if (eval_taskCount > 0)
-            {
-                eval_found = 1;
-                pClient = eval_dequeue();
-                eval_taskCount--;
-                pthread_cond_signal(&eval_taskReady);
-            }
+            char *request_id = PQgetvalue(res, i, 0);
+			printf("%s\n", request_id);
+			pthread_mutex_lock(&eval_queue_mutex);
+			while ((eval_rear + 1) % QUEUE_SIZE == eval_front)
+			{
+				pthread_cond_wait(&eval_taskReady, &eval_queue_mutex);
+			}
 
-            pthread_mutex_unlock(&eval_queue_mutex);
+			// get uuid from database
 
-            if (eval_found == 1)
-                evaluate_file(pClient);
-        }
+			// char *request_id;
+			eval_enqueue(request_id);
+
+			char *query = updateQuery(request_id, 1, "");
+			PQclear(res);
+			res = PQexec(conn, query);
+			if(PQresultStatus(res) != PGRES_COMMAND_OK)
+			{
+				fprintf(stderr,"%s\n",PQerrorMessage(conn));
+			}
+
+			eval_taskCount++;
+			pthread_cond_signal(&eval_taskReady);
+			pthread_mutex_unlock(&eval_queue_mutex);
+		}
 	}
-}
-
-void eval_masterFunc()
-{
-	pthread_mutex_lock(&eval_queue_mutex);
-
-	while ((eval_rear + 1) % QUEUE_SIZE == eval_front)
-	{
-		pthread_cond_wait(&eval_taskReady, &eval_queue_mutex);
-	}
-
-	// get uuid from database
-
-	char *request_id;
-	eval_enqueue(request_id);
-	eval_taskCount++;
-	pthread_cond_signal(&eval_taskReady);
-	pthread_mutex_unlock(&eval_queue_mutex);
 }
 
 void eval_enqueue(char *request_id)
