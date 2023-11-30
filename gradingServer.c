@@ -90,8 +90,7 @@ int recv_file(int sockfd, char *file_path)
 		}
 
 		fwrite(buffer, 1, bytes_read, file);
-		bzero(buffer, BUFFER_SIZE);
-
+		memset(buffer,0,sizeof(buffer));
 		if (total_bytes_read >= file_size)
 			break;
 	}
@@ -365,7 +364,9 @@ void *grader(int *sockfd)
         res = PQexec(conn, query);
         int rows = PQntuples(res);
         if (rows == 0){
-            n = send(newsockfd, "Invalid request id", 19, 0);
+			char msg[150];
+			snprintf(msg, 150, "Grading request %s not found. Please check and resend your request ID or re-send your original grading request.\0",request_id);
+            n = send(newsockfd, msg, sizeof(msg), 0);
             if (n < 0)
                 error("ERROR writing to socket");
         }
@@ -375,32 +376,37 @@ void *grader(int *sockfd)
             
             if (status == 0){
                 // not evaluated
-                n = send(newsockfd, "Not evaluated", 14, 0);
+				char msg[150];
+				snprintf(msg,150,"Your grading request ID %s has been accepted and is currently being processed.\0",request_id);
+                n = send(newsockfd, msg, sizeof(msg), 0);
                 if (n < 0)
                     error("ERROR writing to socket");
             }
             else if (status == 1){
                 // in queue
                 int position = queue_position(request_id);
-                char s1[5];
-                sprintf(s1, "%d", position);
-
-                char s[50];
-                strcat(s, "In Queue at position: ");
-                strcat(s, s1);
+                char s[150];
+                snprintf(s, 150, "Your grading request ID %s has been accepted. It is currently at position %d in the queue.\n\0",request_id,position);
                 n = send(newsockfd, s, sizeof(s), 0);
                 if (n < 0)
                     error("ERROR writing to socket");
             }
             else if (status == 5){
-                n = send(newsockfd, "PASS", 4, 0);
+                char msg[150];
+				snprintf(msg, 150, "Your grading request ID %s processing is done, here are the results: PASS\n",request_id);
+                n = send(newsockfd, msg, sizeof(msg), 0);
                 if (n < 0)
                     error("ERROR writing to socket");
             }
             else {
 				char error_output[1000];
-				strcpy(error_output,error_msg);
-                n = send(newsockfd, error_output, sizeof(error_output), 0);
+				char msg[150];
+				snprintf(msg, 150, "Your grading request ID %s processing is done, here are the results:\n",request_id);
+				strcat(error_output,msg);
+				strcat(error_output,error_msg);
+				int len=strlen(error_output);
+				error_output[len]='\0';
+                n = send(newsockfd, error_output, len, 0);
                 if (n < 0)
                     error("ERROR writing to socket");
             }
