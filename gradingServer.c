@@ -640,7 +640,6 @@ void *eval_thread_function(void *arg)
 		}
 
 		pthread_mutex_unlock(&eval_queue_mutex);
-		printf("thread func %s\n", pClient);
 		if (eval_found == 1)
 			evaluate_file(pClient);
 	}
@@ -667,7 +666,6 @@ void *eval_masterFunc()
 			fprintf(stderr,"%s\n",PQerrorMessage(conn));
 		}
         int rows = PQntuples(res);
-		printf("num rows: %d\n", rows);
         pthread_mutex_lock(&res_mutex);
         while (rows == 0)
         {
@@ -679,14 +677,11 @@ void *eval_masterFunc()
 				fprintf(stderr,"%s\n",PQerrorMessage(conn));
 			}
 			rows = PQntuples(res);
-			printf("num rows: %d\n", rows);
-			pthread_mutex_lock(&res_mutex);
         }
         pthread_mutex_unlock(&res_mutex);
 
         for(int i=0; i<rows; i++) {
             char *request_id = PQgetvalue(res, i, 0);
-			printf("%s\n", request_id);
 			pthread_mutex_lock(&eval_queue_mutex);
 			while ((eval_rear + 1) % QUEUE_SIZE == eval_front)
 			{
