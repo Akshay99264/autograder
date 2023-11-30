@@ -36,6 +36,7 @@ void *eval_thread_function(void *arg);
 void eval_enqueue(char *request_id);
 void *eval_masterFunc();
 char *eval_dequeue();
+int queue_position(char *request_id);
 int eval_front = 0, eval_rear = 0, eval_count = 0, eval_found = 0, eval_taskCount = 0;
 char *eval_queue[QUEUE_SIZE];
 pthread_mutex_t eval_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -358,7 +359,43 @@ void *grader(int *sockfd)
 	else
 	{
 		//code to handle check status case
+        char request_id[37]; 
+        n = recv(newsockfd, request_id, 37, 0);
+        char *query = getQuery(request_id);
+        PQclear(res);
+        res = PQexec(conn, query);
+        int status = atoi(PQgetvalue(res, 0, 0));
+        char *error = PQgetvalue(res, 0, 1);
+        
+        if (status == 0){
+            // not evaluated
+            n = send(newsockfd, "Not evaluated", 14, 0);
+            if (n < 0)
+                error("ERROR writing to socket");
+        }
+        else if (status == 1){
+            // in queue
+            int position = queue_position(request_id);
+            char s1[5];
+            sprintf(s1, "%d", position);
 
+            char s[50];
+            strcat(s, "In Queue at position: ");
+            strcat(s, s1);
+            n = send(newsockfd, s, sizeof(s), 0);
+            if (n < 0)
+                error("ERROR writing to socket");
+        }
+        else if (status == 5){
+            n = send(newsockfd, "PASS", 4, 0);
+            if (n < 0)
+                error("ERROR writing to socket");
+        }
+        else {
+            n = send(newsockfd, error, sizeof(error), 0);
+            if (n < 0)
+                error("ERROR writing to socket");
+        }
 	}
 }
 
@@ -734,4 +771,23 @@ char *eval_dequeue()
 		item = eval_queue[eval_front];
 		return item;
 	}
+}
+
+int queue_position(char *request_id)
+{
+    int i;
+    for (i = 0; i < QUEUE_SIZE; i++){
+        if (eval_queue[i] == request_id){
+            break;
+        }
+    }
+
+    if (i > eval_front)
+    {
+        return eval_front - i;
+    }
+    else
+    {
+        return QUEUE_SIZE - front + i;
+    }
 }
