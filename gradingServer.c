@@ -34,7 +34,7 @@ pthread_cond_t res_ready = PTHREAD_COND_INITIALIZER;
 // evaluation threads
 void *eval_thread_function(void *arg);
 void eval_enqueue(char *request_id);
-void eval_masterFunc();
+void *eval_masterFunc();
 char *eval_dequeue();
 int eval_front = 0, eval_rear = 0, eval_count = 0, eval_found = 0, eval_taskCount = 0;
 char *eval_queue[QUEUE_SIZE];
@@ -122,7 +122,7 @@ char *run_command(char *request_id, char *execFileName)
 	memset(s, 0, sizeof(s));
 	strcpy(s, "./");
 	strcat(s, execFileName);
-	strcat(s, " > output/out");
+	strcat(s, " > output/out_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	strcat(s, " 2> output/runtime_err_");
@@ -136,7 +136,7 @@ char *output_diff_command(char *request_id)
 	char *s;
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "diff output/out");
+	strcpy(s, "diff output/out_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	strcat(s, " actualOutput.txt 1> output/diff_err_");
@@ -206,7 +206,7 @@ char *makeOutputDiffFileName(char *request_id)
 	char *s;
 	s = malloc(200 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "files/diff_err_");
+	strcpy(s, "output/diff_err_");
 	strcat(s, request_id);
 	strcat(s, ".txt");
 	return s;
@@ -371,88 +371,84 @@ void evaluate_file(char *request_id)
     runtimeErrorFile = makeRuntimeErrorFileName(request_id);
     outputFile = makeOutputFileName(request_id);
     outputDiffFile = makeOutputDiffFileName(request_id);
-
     char *comp_command, *r_command, *diff_command;
     comp_command = compile_command(request_id, programFile, execFile);
     r_command = run_command(request_id, execFile);
     diff_command = output_diff_command(request_id);
 
-    while (1)
-    {
-        if (system(comp_command) != 0)
-        {
-            // Handle compiler error
-            FILE *f = fopen(compileErrorFile, "rb");
-            fseek(f, 0, SEEK_END);
-            int len = ftell(f);
-            rewind(f);
-            char tempCompilerErrorBuffer[len];
-            size_t bytes_read = fread(tempCompilerErrorBuffer, 1, sizeof(tempCompilerErrorBuffer), f);
-            tempCompilerErrorBuffer[bytes_read] = '\0';
-            char compilerErrorBuffer[bytes_read + 16];
-            memset(compilerErrorBuffer, 0, sizeof(compilerErrorBuffer));
-            strcat(compilerErrorBuffer, "COMPILER ERROR\n");
-            strcat(compilerErrorBuffer, tempCompilerErrorBuffer);
+	if (system(comp_command) != 0)
+	{
+		// Handle compiler error
+		FILE *f = fopen(compileErrorFile, "rb");
+		fseek(f, 0, SEEK_END);
+		int len = ftell(f);
+		rewind(f);
+		char tempCompilerErrorBuffer[len];
+		size_t bytes_read = fread(tempCompilerErrorBuffer, 1, sizeof(tempCompilerErrorBuffer), f);
+		tempCompilerErrorBuffer[bytes_read] = '\0';
+		char compilerErrorBuffer[bytes_read + 16];
+		memset(compilerErrorBuffer, 0, sizeof(compilerErrorBuffer));
+		strcat(compilerErrorBuffer, "COMPILER ERROR\n");
+		strcat(compilerErrorBuffer, tempCompilerErrorBuffer);
 
-            // save to database
-			char *query = updateQuery(request_id, 2, compilerErrorBuffer);
-			PQclear(res);
-		    res = PQexec(conn, query);
+		// save to database
+		char *query = updateQuery(request_id, 2, compilerErrorBuffer);
+		PQclear(res);
+		res = PQexec(conn, query);
 
-			fclose(f);
-        }
-        else if (system(r_command) != 0)
-        {
-            // Handle runtime time error
-            FILE *f = fopen(runtimeErrorFile, "r");
-            fseek(f, 0, SEEK_END);
-            int len = ftell(f);
-            rewind(f);
-            char tempRuntimeErrorBuffer[len];
-            size_t bytes_read = fread(tempRuntimeErrorBuffer, 1, sizeof(tempRuntimeErrorBuffer), f);
-            tempRuntimeErrorBuffer[bytes_read] = '\0';
-            char runtimeErrorBuffer[bytes_read + 15];
-            memset(runtimeErrorBuffer, 0, sizeof(runtimeErrorBuffer));
-            strcat(runtimeErrorBuffer, "RUNTIME ERROR\n");
-            strcat(runtimeErrorBuffer, tempRuntimeErrorBuffer);
+		fclose(f);
+	}
+	else if (system(r_command) != 0)
+	{
+		// Handle runtime time error
+		FILE *f = fopen(runtimeErrorFile, "r");
+		fseek(f, 0, SEEK_END);
+		int len = ftell(f);
+		rewind(f);
+		char tempRuntimeErrorBuffer[len];
+		size_t bytes_read = fread(tempRuntimeErrorBuffer, 1, sizeof(tempRuntimeErrorBuffer), f);
+		tempRuntimeErrorBuffer[bytes_read] = '\0';
+		char runtimeErrorBuffer[bytes_read + 15];
+		memset(runtimeErrorBuffer, 0, sizeof(runtimeErrorBuffer));
+		strcat(runtimeErrorBuffer, "RUNTIME ERROR\n");
+		strcat(runtimeErrorBuffer, tempRuntimeErrorBuffer);
 
-            // save to database
-            char *query = updateQuery(request_id, 3, runtimeErrorBuffer);
-			PQclear(res);
-		    res = PQexec(conn, query);
-			fclose(f);
-        }
-        else if (system(diff_command) != 0)
-        {
-            // Handle output difference
-            FILE *f = fopen(outputDiffFile, "r");
-            fseek(f, 0, SEEK_END);
-            int len = ftell(f);
-            rewind(f);
-            char tempDiffErrorBuffer[len];
-            size_t bytes_read = fread(tempDiffErrorBuffer, 1, sizeof(tempDiffErrorBuffer), f);
-            tempDiffErrorBuffer[bytes_read] = '\0';
-            char diffErrorBuffer[bytes_read + 18];
-            memset(diffErrorBuffer, 0, sizeof(diffErrorBuffer));
-            strcat(diffErrorBuffer, "OUTPUT DIFFRENCE\n");
-            strcat(diffErrorBuffer, tempDiffErrorBuffer);
-            
-            // save to database
-			char *query = updateQuery(request_id, 4, diffErrorBuffer);
-			PQclear(res);
-		    res = PQexec(conn, query);
-			fclose(f);
-        }
-        else
-        {
-            // Send success message
-			char buff[1];
-			char *query = updateQuery(request_id, 5, buff);
-			PQclear(res);
-		    res = PQexec(conn, query);
-            // save to database
-        }
-    }
+		// save to database
+		char *query = updateQuery(request_id, 3, runtimeErrorBuffer);
+		PQclear(res);
+		res = PQexec(conn, query);
+		fclose(f);
+	}
+	else if (system(diff_command) != 0)
+	{
+		// Handle output difference
+		FILE *f = fopen(outputDiffFile, "r");
+		fseek(f, 0, SEEK_END);
+		int len = ftell(f);
+		rewind(f);
+		char tempDiffErrorBuffer[len];
+		size_t bytes_read = fread(tempDiffErrorBuffer, 1, sizeof(tempDiffErrorBuffer), f);
+		tempDiffErrorBuffer[bytes_read] = '\0';
+		char diffErrorBuffer[bytes_read + 18];
+		memset(diffErrorBuffer, 0, sizeof(diffErrorBuffer));
+		strcat(diffErrorBuffer, "OUTPUT DIFFRENCE\n");
+		strcat(diffErrorBuffer, tempDiffErrorBuffer);
+		
+		// save to database
+		char *query = updateQuery(request_id, 4, diffErrorBuffer);
+		PQclear(res);
+		res = PQexec(conn, query);
+		fclose(f);
+	}
+	else
+	{
+		// Send success message
+		char buff[1];
+		char *query = updateQuery(request_id, 5, buff);
+		PQclear(res);
+		res = PQexec(conn, query);
+		// save to database
+	}
     free(programFile);
     free(execFile);
     free(comp_command);
@@ -526,7 +522,11 @@ int main(int argc, char *argv[])
 	clilen = sizeof(cli_addr);
 	int reqID = 0;
 
-	eval_masterFunc();
+	pthread_t eval_thread;
+	pthread_create(&eval_thread, NULL, eval_masterFunc, NULL);
+	pthread_detach(eval_thread);
+
+	// eval_masterFunc();
 	while (1)
 	{
 		
@@ -640,18 +640,17 @@ void *eval_thread_function(void *arg)
 		}
 
 		pthread_mutex_unlock(&eval_queue_mutex);
-
+		printf("thread func %s\n", pClient);
 		if (eval_found == 1)
 			evaluate_file(pClient);
 	}
 	
 }
 
-void eval_masterFunc()
+void *eval_masterFunc()
 {
 	sleep(2);
     char *query = statusUpdateQuery();
-	perror(query);
     PQclear(res);
     res = PQexec(conn, query);
     if(PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -661,7 +660,6 @@ void eval_masterFunc()
 	while (1)
 	{
         query = filterQuery();
-		printf("%s\n", query);
         PQclear(res);
 		res = PQexec(conn, query);
 		if(PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -674,6 +672,15 @@ void eval_masterFunc()
         while (rows == 0)
         {
             pthread_cond_wait(&res_ready, &res_mutex);
+			PQclear(res);
+			res = PQexec(conn, query);
+			if(PQresultStatus(res) != PGRES_COMMAND_OK)
+			{
+				fprintf(stderr,"%s\n",PQerrorMessage(conn));
+			}
+			rows = PQntuples(res);
+			printf("num rows: %d\n", rows);
+			pthread_mutex_lock(&res_mutex);
         }
         pthread_mutex_unlock(&res_mutex);
 
@@ -687,14 +694,11 @@ void eval_masterFunc()
 			}
 
 			// get uuid from database
-
-			// char *request_id;
 			eval_enqueue(request_id);
 
 			char *query = updateQuery(request_id, 1, "");
-			PQclear(res);
-			res = PQexec(conn, query);
-			if(PQresultStatus(res) != PGRES_COMMAND_OK)
+			PGresult *update_res = PQexec(conn, query);
+			if(PQresultStatus(update_res) != PGRES_COMMAND_OK)
 			{
 				fprintf(stderr,"%s\n",PQerrorMessage(conn));
 			}
