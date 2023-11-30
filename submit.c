@@ -71,19 +71,19 @@ int main(int argc, char *argv[])
     double total_response_time = 0, throughput = 0, avg_response_time = 0, request_rate = 0, goodput = 0, timeout_rate = 0, error_rate = 0;
     struct timeval start, end, loop_start, loop_end;
 
-    strcpy(request_type,argv[1]);
+    strcpy(request_type, argv[1]);
     strcpy(server_ip, argv[2]);
     server_port = atoi(argv[3]);
 
     if (strcmp(request_type, "status") == 0 || strcmp(request_type, "Status") == 0)
     {
         request_flag = 0;
-        strcpy(requestID, argv[4]);      
+        strcpy(requestID, argv[4]);
     }
     else if (strcmp(request_type, "new") == 0 || strcmp(request_type, "New") == 0)
     {
         request_flag = 1;
-        strcpy(file_path, argv[4]);   
+        strcpy(file_path, argv[4]);
     }
     else
     {
@@ -121,16 +121,16 @@ int main(int argc, char *argv[])
         }
     }
 
-    int n=send(sockfd,request_type,sizeof(request_type),0);
-    if(n<0)
+    int n = send(sockfd, request_type, sizeof(request_type), 0);
+    if (n < 0)
     {
         perror("ERROR sending request type");
         close(sockfd);
         return -1;
     }
-    if(request_flag == 1)
+    if (request_flag == 1)
     {
-        
+
         if (send_file(sockfd, file_path) != 0)
         {
             printf("Error sending source file\n");
@@ -139,7 +139,13 @@ int main(int argc, char *argv[])
     }
     else
     {
-        // code to handle status case;
+        int n = send(sockfd, requestID, sizeof(requestID), 0);
+        if (n < 0)
+        {
+            perror("ERROR sending request type");
+            close(sockfd);
+            return -1;
+        }
     }
 
     int bytes_read;

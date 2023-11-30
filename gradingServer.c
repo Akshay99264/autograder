@@ -21,7 +21,6 @@ int *dequeue();
 const int BUFFER_SIZE = 1024;
 const int MAX_FILE_SIZE_BYTES = 4;
 int front = 0, rear = 0, count = 0, found = 0, taskCount = 0;
-char request_id[37]; 
 int *queue[QUEUE_SIZE];
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t task_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -278,7 +277,7 @@ char *getQuery(char *request_id)
 	
 	s = malloc(2000 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "SECECT status, error FROM grading_requests WHERE request_id = '");
+	strcpy(s, "SELECT status, error FROM grading_requests WHERE id = '");
     strcat(s, request_id);
     strcat(s, "'");
 	return s;
@@ -300,6 +299,7 @@ void *grader(int *sockfd)
 	int newsockfd = *(int *)sockfd;
 	int n;
 	char request_type[10];
+	char request_id[37];
 	char *programFile, *execFile, *compileErrorFile, *runtimeErrorFile, *outputFile, *outputDiffFile;
 	// execFile = makeExecFileName((int)pthread_self());
 	// compileErrorFile = makeCompileErrorFileName((int)pthread_self());
@@ -359,7 +359,6 @@ void *grader(int *sockfd)
 	else
 	{
 		//code to handle check status case
-        char request_id[37]; 
         n = recv(newsockfd, request_id, 37, 0);
         char *query = getQuery(request_id);
         PQclear(res);
@@ -372,7 +371,7 @@ void *grader(int *sockfd)
         }
         else{
             int status = atoi(PQgetvalue(res, 0, 0));
-            char *error = PQgetvalue(res, 0, 1);
+            char *error_msg = PQgetvalue(res, 0, 1);
             
             if (status == 0){
                 // not evaluated
@@ -399,7 +398,9 @@ void *grader(int *sockfd)
                     error("ERROR writing to socket");
             }
             else {
-                n = send(newsockfd, error, sizeof(error), 0);
+				char error_output[1000];
+				strcpy(error_output,error_msg);
+                n = send(newsockfd, error_output, sizeof(error_output), 0);
                 if (n < 0)
                     error("ERROR writing to socket");
             }
