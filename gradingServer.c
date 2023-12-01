@@ -300,16 +300,7 @@ void *grader(int *sockfd)
 	char request_type[10];
 	char request_id[37];
 	char *programFile, *execFile, *compileErrorFile, *runtimeErrorFile, *outputFile, *outputDiffFile;
-	// execFile = makeExecFileName((int)pthread_self());
-	// compileErrorFile = makeCompileErrorFileName((int)pthread_self());
-	// runtimeErrorFile = makeRuntimeErrorFileName((int)pthread_self());
-	// outputFile = makeOutputFileName((int)pthread_self());
-	// outputDiffFile = makeOutputDiffFileName((int)pthread_self());
 
-	// char *comp_command, *r_command, *diff_command;
-	// comp_command = compile_command((int)pthread_self(), programFile, execFile);
-	// r_command = run_command((int)pthread_self(), execFile);
-	// diff_command = output_diff_command((int)pthread_self());
 	n = recv(newsockfd, request_type, sizeof(request_type), 0);
 	if (n < 0)
 		error("ERROR on accept request type");
@@ -374,10 +365,20 @@ void *grader(int *sockfd)
             int status = atoi(PQgetvalue(res, 0, 0));
             char *error_msg = PQgetvalue(res, 0, 1);
             
-            if (status == 0){
+			printf("status: %d", status);
+
+            if (status == 2){
                 // not evaluated
 				char msg[150];
 				snprintf(msg,150,"Your grading request ID %s has been accepted and is currently being processed.\0",request_id);
+                n = send(newsockfd, msg, sizeof(msg), 0);
+                if (n < 0)
+                    error("ERROR writing to socket");
+            }
+			else if (status == 0){
+                // not evaluated
+				char msg[150];
+				snprintf(msg,150,"Your grading request ID %s has been accepted and will be processed soon.\0",request_id);
                 n = send(newsockfd, msg, sizeof(msg), 0);
                 if (n < 0)
                     error("ERROR writing to socket");
@@ -391,7 +392,7 @@ void *grader(int *sockfd)
                 if (n < 0)
                     error("ERROR writing to socket");
             }
-            else if (status == 5){
+            else if (status == 6){
                 char msg[150];
 				snprintf(msg, 150, "Your grading request ID %s processing is done, here are the results: PASS\n",request_id);
                 n = send(newsockfd, msg, sizeof(msg), 0);
@@ -444,7 +445,7 @@ void evaluate_file(char *request_id)
 		strcat(compilerErrorBuffer, tempCompilerErrorBuffer);
 
 		// save to database
-		char *query = updateQuery(request_id, 2, compilerErrorBuffer);
+		char *query = updateQuery(request_id, 3, compilerErrorBuffer);
 		PQclear(res);
 		res = PQexec(conn, query);
 
@@ -466,7 +467,7 @@ void evaluate_file(char *request_id)
 		strcat(runtimeErrorBuffer, tempRuntimeErrorBuffer);
 
 		// save to database
-		char *query = updateQuery(request_id, 3, runtimeErrorBuffer);
+		char *query = updateQuery(request_id, 4, runtimeErrorBuffer);
 		PQclear(res);
 		res = PQexec(conn, query);
 		fclose(f);
@@ -487,7 +488,7 @@ void evaluate_file(char *request_id)
 		strcat(diffErrorBuffer, tempDiffErrorBuffer);
 		
 		// save to database
-		char *query = updateQuery(request_id, 4, diffErrorBuffer);
+		char *query = updateQuery(request_id, 5, diffErrorBuffer);
 		PQclear(res);
 		res = PQexec(conn, query);
 		fclose(f);
@@ -496,7 +497,7 @@ void evaluate_file(char *request_id)
 	{
 		// Send success message
 		char buff[1];
-		char *query = updateQuery(request_id, 5, buff);
+		char *query = updateQuery(request_id, 6, buff);
 		PQclear(res);
 		res = PQexec(conn, query);
 		// save to database
@@ -538,7 +539,7 @@ int main(int argc, char *argv[])
 	}
 
 	// Postgres connection
-	conn = PQconnectdb("dbname=autograder user=postgres password=1234 host=localhost");
+	conn = PQconnectdb("dbname=autograder user=grader_user password=password host=localhost");
 	// Check for a successful connection
     if (PQstatus(conn) != CONNECTION_OK) {
         fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
@@ -546,15 +547,15 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    const char *createTableSQL = "CREATE TABLE IF NOT EXISTS grading_requests (id uuid primary key, status int, error text null default null)";
-    res = PQexec(conn, createTableSQL);
+    // const char *createTableSQL = "CREATE TABLE IF NOT EXISTS grading_requests (id uuid primary key, status int, error text null default null)";
+    // res = PQexec(conn, createTableSQL);
 
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        fprintf(stderr, "Table creation failed: %s", PQerrorMessage(conn));
-        PQclear(res);
-        PQfinish(conn);
-        exit(1);
-    }
+    // if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+    //     fprintf(stderr, "Table creation failed: %s", PQerrorMessage(conn));
+    //     PQclear(res);
+    //     PQfinish(conn);
+    //     exit(1);
+    // }
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -688,6 +689,13 @@ void *eval_thread_function(void *arg)
 			eval_found = 1;
 			pClient = eval_dequeue();
 			eval_taskCount--;
+			char *query = updateQuery(pClient, 2, "");
+			PGresult *update_res = PQexec(conn, query);
+			if(PQresultStatus(update_res) != PGRES_COMMAND_OK)
+			{
+				fprintf(stderr,"%s\n",PQerrorMessage(conn));
+			}
+
 			pthread_cond_signal(&eval_taskReady);
 		}
 
