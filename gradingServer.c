@@ -289,7 +289,7 @@ char *statusUpdateQuery()
 	
 	s = malloc(2000 * sizeof(char));
 	memset(s, 0, sizeof(s));
-	strcpy(s, "UPDATE grading_requests SET status = 0 WHERE status = 1");
+	strcpy(s, "UPDATE grading_requests SET status = 0 WHERE status = 1 OR status = 2");
 	return s;
 }
 
